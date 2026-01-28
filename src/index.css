@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@theme {
+  /* v4 现在支持在 CSS 里直接定义主题变量，非常爽 */
+  --color-ef-yellow: #ffca28;
+}
+
+body {
+  background-color: #0c0d10;
+  @apply text-gray-300;
+}
