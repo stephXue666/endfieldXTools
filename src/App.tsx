@@ -1,162 +1,190 @@
-import { useState, useEffect, useMemo } from 'react'
-
-// --- 1. 定义类型接口 (TS 玩家必备) ---
-interface Category {
-    name: string;
-    stats: string[];
-}
-
-interface Config {
-    APP_VERSION: string;
-    DATABASE: Record<string, Category>;
-    DUNGEONS: { name: string; drop: string }[];
-}
-
-interface Verdict {
-    title: string;
-    color: string;
-    score: number;
-    desc: string;
-}
+import { useState, useEffect } from 'react';
+import WeaponInventory from './components/WeaponInventory';
+import FarmingAdvisor from './components/FarmingAdvisor';
+import MatrixEvaluator from './components/MatrixEvaluator';
+import type { Config, Weapon } from './types';
 
 export default function App() {
-    // --- 2. 定义状态 (State) ---
     const [config, setConfig] = useState<Config | null>(null);
-    const [weaponTarget, setWeaponTarget] = useState<Record<string, string | null>>({});
+    const [selectedWeapon, setSelectedWeapon] = useState<Weapon | null>(null);
     const [matrixInput, setMatrixInput] = useState<string[]>([]);
+    const [activeTab, setActiveTab] = useState<'advisor' | 'evaluator'>('advisor');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [farmingList, setFarmingList] = useState<string[]>(() => {
+        const saved = localStorage.getItem('ef_farming_list');
+        return saved ? JSON.parse(saved) : [];
+    });
 
-    // --- 3. 获取数据 (Effect) ---
+    // 1. 初始化数据
     useEffect(() => {
-        // Vite 开发环境下，'./data.json' 会去 public 文件夹寻找
+        const saved = localStorage.getItem('ef_farming_list');
+        if (saved) setFarmingList(JSON.parse(saved));
+
+        // 读取配置
         fetch('./data.json')
-            .then(res => res.json())
+            .then((res) => res.json())
             .then((data: Config) => {
                 setConfig(data);
-                // 初始化武器目标锁定状态
-                const init: Record<string, string | null> = {};
-                Object.keys(data.DATABASE).forEach(k => init[k] = null);
-                setWeaponTarget(init);
-            })
-            .catch(err => console.error("Sync Error:", err));
+                if (data.WEAPONS.length > 0) setSelectedWeapon(data.WEAPONS[0]);
+            });
     }, []);
 
-    // --- 4. 判定逻辑 (Memo) ---
-    const verdict = useMemo<Verdict | null>(() => {
-        if (!config || matrixInput.length < 3) return null;
+    useEffect(() => {
+        localStorage.setItem('ef_farming_list', JSON.stringify(farmingList));
+    }, [farmingList]);
 
-        // 过滤出已选的武器词条
-        const targets = Object.values(weaponTarget).filter((v): v is string => v !== null);
-        const matches = matrixInput.filter(s => targets.includes(s)).length;
-        const score = Math.round((matches / 3) * 100);
+    // 2. 武器选择回调（处理移动端自动收起）
+    const handleWeaponSelect = (w: Weapon) => {
+        setSelectedWeapon(w);
+        setMatrixInput([]); // 切换武器清空当前鉴定输入
+        if (window.innerWidth < 1024) {
+            setIsSidebarOpen(false);
+        }
+    };
 
-        const levels = [
-            { m: 3, t: 'Optimal', c: 'border-yellow-500 text-yellow-500 bg-yellow-500/10', d: '完美契合，建议拉满。' },
-            { m: 2, t: 'Great', c: 'border-green-500 text-green-400 bg-green-500/10', d: '高质量，优质过渡。' },
-            { m: 1, t: 'Suboptimal', c: 'border-blue-500 text-blue-400 bg-blue-500/10', d: '契合度低，建议喂掉。' },
-            { m: 0, t: 'Fodder', c: 'border-red-500 text-red-500 bg-red-500/10', d: '完全不匹配的废料。' }
-        ];
+    // 3. 切换武器勾选状态
+    const toggleFarmingWeapon = (weaponName: string) => {
+        setFarmingList(prev =>
+            prev.includes(weaponName)
+                ? prev.filter(n => n !== weaponName)
+                : [...prev, weaponName]
+        );
+    };
+    // 4. 清空清单
+    const clearFarmingList = () => {
+        if (confirm("确定要清空所有选中的刷取目标吗？")) {
+            setFarmingList([]);
+        }
+    };
 
-        const res = levels.find(l => matches >= l.m)!;
-        return { title: res.t, color: res.c, score, desc: res.d };
-    }, [matrixInput, weaponTarget, config]);
-
-    // --- 5. 渲染逻辑 (JSX) ---
-    if (!config) return <div className="h-screen flex items-center justify-center font-mono text-gray-500">SYNCING_DATA...</div>;
+    if (!config) {
+        return (
+            <div className="h-screen bg-[#0c0d10] flex items-center justify-center font-sans text-gray-800 tracking-[0.4em] uppercase">
+                初始化中...
+            </div>
+        );
+    }
 
     return (
-        <div className="max-w-5xl mx-auto p-4 sm:p-10 text-gray-300">
-            <header className="flex justify-between items-end mb-8 border-b border-gray-800 pb-4">
-                <div>
-                    <h1 className="text-3xl font-black italic text-[#ffca28] uppercase tracking-tighter">endfieldXTools</h1>
-                    <p className="text-[10px] text-gray-600 font-mono mt-1 tracking-widest uppercase">Protocol: React + TSX</p>
+        <div className="h-screen w-full bg-[#0c0d10] font-sans flex flex-col overflow-hidden text-gray-400">
+
+            {/* --- I. 顶级导航栏 (Top Bar) --- */}
+            <header className="flex-shrink-0 h-16 bg-[#111418] border-b border-gray-800 px-4 lg:px-8 flex items-center justify-between z-50 shadow-2xl">
+                <div className="flex items-center gap-4">
+                    {/* 移动端菜单触发器 */}
+                    <button
+                        onClick={() => setIsSidebarOpen(true)}
+                        // 增加 flex items-center gap-2 让图标和文字对齐并保持间距
+                        className="lg:hidden p-2 px-3 bg-[#ffca28] text-black rounded flex items-center gap-2 hover:scale-105 active:scale-95 transition-all shadow-lg"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 6h16M4 12h16m-7 6h7" />
+                        </svg>
+                        <span className="text-xs font-bold whitespace-nowrap">
+                            武器选择
+                        </span>
+                    </button>
+
+                    {/* Logo & 系统标识 */}
+                    <div className="flex items-center gap-3">
+                        {/*<div className="w-8 h-8 bg-[#ffca28] rounded flex items-center justify-center font-black text-black italic text-xl shadow-[0_0_15px_rgba(255,202,40,0.3)]">*/}
+                        {/*    X*/}
+                        {/*</div>*/}
+                        <div className="flex flex-col">
+                            <h1 className="text-white font-black text-lg leading-none">EndfieldXTools</h1>
+                            <span className="text-[12px] text-gray-600 font-mono uppercase">基质小工具</span>
+                        </div>
+                    </div>
                 </div>
-                <span className="text-[10px] text-gray-500 font-mono">VER: {config.APP_VERSION}</span>
+
+                {/* 右侧：元数据 */}
+                <div className="flex items-center gap-6">
+                    <div className="hidden md:flex flex-col text-right">
+                        <span className="text-[12px] text-gray-600 font-mono tracking-widest">By</span>
+                        <span className="text-xs font-bold text-gray-400">StephenXue</span>
+                    </div>
+                    <div className="h-8 w-px bg-gray-800 hidden md:block"></div>
+                    <div className="flex flex-col text-right">
+                        <span className="text-[9px] text-[#ffca28] font-mono uppercase tracking-widest">当前版本</span>
+                        <span className="text-xs font-black text-white font-mono">{config.APP_VERSION}</span>
+                    </div>
+                </div>
             </header>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* 左侧：武器目标锁定 */}
-                <section className="bg-[#16191d] p-5 border-l-4 border-[#ffca28] shadow-2xl">
-                    <h3 className="text-[10px] text-gray-500 mb-6 uppercase tracking-widest font-bold">// Weapon Targets</h3>
-                    {Object.entries(config.DATABASE).map(([key, cat]) => (
-                        <div key={key} className="mb-8 last:mb-0">
-                            <label className="text-[9px] text-[#ffca28] font-bold mb-2 block uppercase border-l border-gray-800 pl-2">{cat.name}</label>
-                            <div className="flex flex-wrap gap-1.5">
-                                {cat.stats.map(s => (
-                                    <button
-                                        key={s}
-                                        onClick={() => setWeaponTarget(prev => ({...prev, [key]: s}))}
-                                        className={`px-2.5 py-1.5 rounded text-[11px] transition-all border border-gray-800 ${weaponTarget[key] === s ? 'bg-[#ffca28] text-black font-bold' : 'bg-[#1a1e23] hover:border-gray-600'}`}
-                                    >
-                                        {s}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
-                </section>
+            {/* --- II. 全屏应用布局 --- */}
+            <div className="flex-1 w-full max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 p-4 lg:p-8 min-h-0">
 
-                {/* 右侧：分析判定区 */}
-                <section className="lg:col-span-2 bg-[#16191d] p-5 border-l-4 border-blue-500 shadow-2xl">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">// Analysis Board</h3>
-                        <button onClick={() => setMatrixInput([])} className="text-[9px] text-gray-600 hover:text-red-500 border border-gray-800 px-2 py-1 rounded">CLEAR</button>
+                {/* 左侧：仓库组件 (独立滚动) */}
+                <WeaponInventory
+                    config={config}
+                    selectedWeapon={selectedWeapon}
+                    onSelect={handleWeaponSelect}
+                    isOpen={isSidebarOpen}
+                    onClose={() => setIsSidebarOpen(false)}
+                    farmingList={farmingList}
+                    onToggleFarming={toggleFarmingWeapon}
+                    onClearFarming={clearFarmingList}
+                />
+
+                {/* 右侧：功能主区 (独立滚动) */}
+                <main className="lg:col-span-9 flex flex-col h-full min-h-0">
+
+                    {/* 页签控制器 */}
+                    <div className="flex-shrink-0 flex items-stretch gap-1 mb-6 bg-[#111418] p-1 rounded-xl border border-gray-900 w-fit">
+                        <button
+                            onClick={() => setActiveTab('advisor')}
+                            className={`px-8 py-3 rounded-lg text-sm font-black transition-all flex items-center gap-3 ${
+                                activeTab === 'advisor'
+                                    ? 'bg-[#ffca28] text-black shadow-[0_0_20px_rgba(255,202,40,0.2)]'
+                                    : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                            }`}
+                        >
+                            <div className={`w-1.5 h-1.5 rounded-full ${activeTab === 'advisor' ? 'bg-black animate-pulse' : 'bg-gray-800'}`}></div>
+                            <span className="tracking-wider">刷取淤积点</span>
+                        </button>
+
+                        {/*<button*/}
+                        {/*    onClick={() => setActiveTab('evaluator')}*/}
+                        {/*    className={`px-8 py-3 rounded-lg text-sm font-black transition-all flex items-center gap-3 ${*/}
+                        {/*        activeTab === 'evaluator'*/}
+                        {/*            ? 'bg-[#ffca28] text-black shadow-[0_0_20px_rgba(255,202,40,0.2)]'*/}
+                        {/*            : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'*/}
+                        {/*    }`}*/}
+                        {/*>*/}
+                        {/*    <div className={`w-1.5 h-1.5 rounded-full ${activeTab === 'evaluator' ? 'bg-black animate-pulse' : 'bg-gray-800'}`}></div>*/}
+                        {/*    <span className="tracking-wider">基质筛选</span>*/}
+                        {/*</button>*/}
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3 mb-8">
-                        {[0, 1, 2].map(i => (
-                            <div key={i} className="h-14 sm:h-16 bg-black/40 border-b-2 border-gray-700 flex items-center justify-center text-[#ffca28] font-bold text-sm sm:text-lg">
-                                {matrixInput[i] || '---'}
-                            </div>
-                        ))}
+                    {/* 动态滚动内容区 */}
+                    <div className="flex-1 overflow-y-auto pr-2 custom-scroll min-h-0 pb-10">
+                        <div key={activeTab} className="animate-in fade-in slide-in-from-right-4 duration-500">
+                            {activeTab === 'advisor' ? (
+                                <FarmingAdvisor
+                                    config={config}
+                                    farmingList={farmingList}
+                                />
+                            ) : (
+                                <MatrixEvaluator
+                                    config={config}
+                                    selectedWeapon={selectedWeapon}
+                                    matrixInput={matrixInput}
+                                    setMatrixInput={setMatrixInput}
+                                />
+                            )}
+                        </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
-                        {Object.values(config.DATABASE).map((cat, idx) => (
-                            <div key={idx} className="space-y-1">
-                                <div className="text-[8px] text-gray-700 font-black mb-2 uppercase tracking-tighter">{cat.name}</div>
-                                <div className="grid grid-cols-2 sm:grid-cols-1 gap-1">
-                                    {cat.stats.map(s => (
-                                        <button
-                                            key={s}
-                                            onClick={() => matrixInput.length < 3 && setMatrixInput(prev => [...prev, s])}
-                                            className="text-left px-2 py-2 bg-[#1a1e23] hover:bg-[#252a31] rounded text-[10px] text-gray-400 truncate border border-transparent hover:border-gray-700 transition-colors"
-                                        >
-                                            + {s}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {verdict ? (
-                        <div className={`p-5 rounded border-r-4 flex items-center justify-between shadow-inner animate-in slide-in-from-bottom-2 duration-300 ${verdict.color}`}>
-                            <div>
-                                <div className="text-3xl font-black italic uppercase tracking-tighter">{verdict.title}</div>
-                                <div className="text-[10px] font-bold mt-1 opacity-70 tracking-widest uppercase">{verdict.desc}</div>
-                            </div>
-                            <div className="text-4xl font-black font-mono">{verdict.score}%</div>
-                        </div>
-                    ) : (
-                        <div className="h-24 flex items-center justify-center border border-dashed border-gray-800 rounded text-[10px] text-gray-600 uppercase tracking-[0.3em] font-mono">
-                            Waiting for input...
-                        </div>
-                    )}
-                </section>
+                </main>
             </div>
 
-            {/* 底部：副本参考 */}
-            <footer className="mt-8 p-5 bg-[#111317] rounded border border-gray-800">
-                <h3 className="text-[10px] font-bold text-gray-600 uppercase mb-4 tracking-[0.2em]">// Drop Data Reference</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                    {config.DUNGEONS.map(d => (
-                        <div key={d.name} className="p-3 bg-black/20 border border-gray-800 rounded group hover:border-gray-600 transition-colors">
-                            <div className="text-[11px] font-bold text-[#ffca28] mb-1 leading-none">{d.name}</div>
-                            <div className="text-[9px] text-gray-600 leading-tight mt-1">{d.drop}</div>
-                        </div>
-                    ))}
-                </div>
-            </footer>
+            {/* 移动端菜单背景遮罩 */}
+            {isSidebarOpen && (
+                <div
+                    className="lg:hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-40 animate-in fade-in duration-300"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
         </div>
-    )
+    );
 }
