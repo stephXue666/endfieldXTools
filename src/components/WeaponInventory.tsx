@@ -100,7 +100,6 @@ export default function WeaponInventory({
                     return (
                         <button
                             key={w.name}
-                            // 关键改动：一个点击同时触发“选中分析”和“切换勾选”
                             onClick={() => {
                                 onSelect(w);
                                 onToggleFarming(w.name);
@@ -116,7 +115,7 @@ export default function WeaponInventory({
                         >
                             {/* 勾选状态指示器 (放在右侧) */}
                             <div className={`
-                                absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center
+                                absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center z-10
                                 ${isTracked
                                     ? 'bg-[#ffca28] border-[#ffca28] scale-110'
                                     : 'border-gray-800 group-hover:border-gray-600 scale-100'

@@ -33,13 +33,10 @@ export default function App() {
         localStorage.setItem('ef_farming_list', JSON.stringify(farmingList));
     }, [farmingList]);
 
-    // 2. 武器选择回调（处理移动端自动收起）
+    // 2. 武器选择回调
     const handleWeaponSelect = (w: Weapon) => {
         setSelectedWeapon(w);
         setMatrixInput([]); // 切换武器清空当前鉴定输入
-        if (window.innerWidth < 1024) {
-            setIsSidebarOpen(false);
-        }
     };
 
     // 3. 切换武器勾选状态
@@ -100,13 +97,16 @@ export default function App() {
                 {/* 右侧：元数据 */}
                 <div className="flex items-center gap-6">
                     <div className="hidden md:flex flex-col text-right">
-                        <span className="text-[12px] text-gray-600 font-mono tracking-widest">By</span>
+                        <span className="text-[12px] text-gray-600 font-mono">By</span>
                         <span className="text-xs font-bold text-gray-400">StephenXue</span>
                     </div>
                     <div className="h-8 w-px bg-gray-800 hidden md:block"></div>
                     <div className="flex flex-col text-right">
-                        <span className="text-[9px] text-[#ffca28] font-mono uppercase tracking-widest">当前版本</span>
-                        <span className="text-xs font-black text-white font-mono">{config.APP_VERSION}</span>
+                        <span className="text-[12px] text-[#ffca28] tracking-wider">
+                            版本:
+                            <span className="font-black text-white font-mono pl-2">{config.APP_VERSION}</span>
+                        </span>
+                        <span className="text-[10px] font text-white">游戏数据版本：{config.LAST_UPDATE}</span>
                     </div>
                 </div>
             </header>
